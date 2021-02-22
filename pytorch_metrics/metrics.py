@@ -1,8 +1,7 @@
+from __future__ import annotations
 import torch
 from torch import Tensor
 import numpy as np
-import scipy.stats as stats
-import functools
 from pytorch_metrics.utils import is_binary
 from typing import Union
 
@@ -23,20 +22,14 @@ class Metrics:
     def value(self) -> Union[int, float]:
         return self.values[-1]
 
-    def mean(self, axis: int = axis) -> float:
-        return np.mean(self.values, axis=axis)
+    def mean(self, dim: int = 0) -> float:
+        return torch.mean(torch.tensor(self.values), dim=dim)
 
-    def var(self, axis: int = 0) -> float:
-        return np.var(self.values, axis=axis)
+    def var(self, dim: int = 0) -> float:
+        return torch.var(torch.tensor(self.values), dim=dim)
 
-    def std(self, axis: int = 0) -> float:
-        return np.std(self.values, axis=axis)
-
-    def skew(self, axis: int = 0) -> float:
-        return stats.skew(self.values, axis=axis)
-
-    def kurtosis(self, axis: int = 0) -> float:
-        return stats.kurtosis(self.values, axis=axis)
+    def std(self, dim: int = 0) -> float:
+        return torch.std(torch.tensor(self.values), dim=dim)
 
 
 class FuncContinueAverage(Metrics):
@@ -44,7 +37,7 @@ class FuncContinueAverage(Metrics):
         super().__init__(epsilon)
         self.func = func
 
-    def __call__(self, *args, **kwargs) -> self:
+    def __call__(self, *args, **kwargs) -> FuncContinueAverage:
         super().__call__(None, None)
         self.values.append(self.func(*args, **kwargs))
 
@@ -55,7 +48,7 @@ class ContinueAverage(Metrics):
     def __init__(self, epsilon=1e-10):
         super().__init__(epsilon)
 
-    def __call__(self, value) -> self:
+    def __call__(self, value) -> ContinueAverage:
         super().__call__(None, None)
         self.values.append(value)
 
@@ -67,7 +60,7 @@ class BinaryAccuracy(Metrics):
         Metrics.__init__(self, epsilon)
 
     def __call__(self, y_pred: Tensor, y_true: Tensor,
-                 threshold: Union[float, list[float]]) -> self:
+                 threshold: Union[float, list[float]]) -> BinaryAccuracy:
         super().__call__(y_pred, y_true)
 
         # Compute the accuracy
@@ -92,7 +85,7 @@ class CategoricalAccuracy(Metrics):
     def __init__(self, epsilon=1e-10):
         Metrics.__init__(self, epsilon)
 
-    def __call__(self, y_pred: Tensor, y_true: Tensor) -> self:
+    def __call__(self, y_pred: Tensor, y_true: Tensor) -> CategoricalAccuracy:
         super().__call__(y_pred, y_true)
 
         # Check if y_pred is of type long and contain class index
@@ -109,7 +102,7 @@ class Ratio(Metrics):
     def __init__(self, epsilon=1e-10):
         Metrics.__init__(self, epsilon)
 
-    def __call__(self, y1: Tensor, y2: Tensor) -> self:
+    def __call__(self, y1: Tensor, y2: Tensor) -> Ratio:
         super().__call__(y1, y2)
 
         results = zip(y1, y2)
@@ -125,7 +118,7 @@ class Precision(Metrics):
         self.dim = dim
 
     def __call__(self, y_pred: Tensor, y_true: Tensor,
-                 threshold: Union[float, list[float]]) -> self:
+                 threshold: Union[float, list[float]] = None) -> Precision:
         super().__call__(y_pred, y_true)
 
         with torch.set_grad_enabled(False):
@@ -143,7 +136,7 @@ class Precision(Metrics):
             y_true = y_true.float()
             y_pred = y_pred.float()
 
-            true_positives = torch.sum(y_true * y_pred), dim=dim)
+            true_positives = torch.sum(y_true * y_pred, dim=dim)
             predicted_positives = torch.sum(y_pred, dim=dim)
 
             if self.dim is None and predicted_positives == 0:
@@ -161,7 +154,7 @@ class Recall(Metrics):
         self.dim = dim
 
     def __call__(self, y_pred: Tensor, y_true: Tensor,
-                 threshold: Union[float, list[float]]) -> self:
+                 threshold: Union[float, list[float]] = None) -> Recall:
         super().__call__(y_pred, y_true)
 
         with torch.set_grad_enabled(False):
@@ -199,14 +192,15 @@ class FScore(Metrics):
         self.precision_func = Precision(dim, epsilon)
         self.recall_func = Recall(dim, epsilon)
 
-    def __call__(self, y_pred: Tensor, y_true: Tensor):
+    def __call__(self, y_pred: Tensor, y_true: Tensor,
+                 threshold: Union[float, list[float]] = None) -> FScore:
         super().__call__(y_pred, y_true)
 
         with torch.set_grad_enabled(False):
             dim = () if self.dim is None else self.dim
             
-            self.precision = self.precision_func(y_pred, y_true)
-            self.recall = self.recall_func(y_pred, y_true)
+            self.precision = self.precision_func(y_pred, y_true, threshold)
+            self.recall = self.recall_func(y_pred, y_true, threshold)
 
             if self.dim is None and (self.precision == 0 and self.recall == 0):
                 self.values.append(torch.as_tensor(0.0))
