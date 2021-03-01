@@ -8,7 +8,6 @@ class Metrics:
         self.accumulate_value = 0
         self.epsilon = epsilon
 
-
     def reset(self):
         self.values = []
 
@@ -19,15 +18,22 @@ class Metrics:
     def value(self):
         return self.values[-1]
 
-    @property
-    def mean(self):
-        nb_value = len(self.values)
-        accumulate = sum(self.values)
+    def mean(self, size: int = None):
+        if size is None:
+            nb_value = len(self.values)
+            accumulate = sum(self.values)
+        
+        else:
+            nb_value = size
+            accumulate = sum(self.values[-size:])
+            
         return accumulate / nb_value
-
-    @property
-    def std(self):
-        return np.std(self.values)
+    
+    def std(self, size: int = None):
+        if size is None:
+            return np.std(self.values)
+    
+        return np.std(self.values[-size:])
 
 
 class FuncContinueAverage(Metrics):
@@ -62,10 +68,11 @@ class BinaryAccuracy(Metrics):
 
         with torch.set_grad_enabled(False):
             y_pred = (y_pred > 0.5).float()
-            correct = (y_pred == y_true).float().sum()
-            self.values.append(correct / np.prod(y_true.shape))
+            correct = (y_pred == y_true).float()
+            self.values.append(torch.mean(correct))
 
         return self
+
 
 
 class CategoricalAccuracy(Metrics):
