@@ -29,7 +29,7 @@ class Metrics:
             accumulate = sum(self.values[-size:])
             
         avg = accumulate / nb_value
-        return avg.item()
+        return avg
     
     def std(self, size: int = None):
         if size is None:
@@ -38,7 +38,7 @@ class Metrics:
         else:
             std_ = np.std(self.values[-size:])
     
-        return std_.item()
+        return std_
 
 
 class FuncContinueAverage(Metrics):
