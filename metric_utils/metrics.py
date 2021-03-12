@@ -1,6 +1,7 @@
 import torch
 import numpy as np
-import functools
+from sklearn import metrics
+import numpy
 
 
 class Metrics:
@@ -23,22 +24,40 @@ class Metrics:
         if size is None:
             nb_value = len(self.values)
             accumulate = sum(self.values)
-        
+
         else:
             nb_value = size
             accumulate = sum(self.values[-size:])
-            
+
         avg = accumulate / nb_value
         return avg
-    
+
     def std(self, size: int = None):
         if size is None:
             std_ = np.std(self.values)
-        
+
         else:
             std_ = np.std(self.values[-size:])
-    
+
         return std_
+
+
+class MAP(Metrics):
+    def __init__(self, epsilon=1e-10):
+        super().__init__(epsilon)
+
+    def __call__(self, y_pred, y_true):
+        super().__call__(y_pred, y_true)
+
+        with torch.set_grad_enabled(False):
+            if y_pred.is_cuda: y_pred = y_pred.cpu()
+            if y_true.is_cuda: y_true = y_true.cpu()
+
+            aps = metrics.average_precision_score(y_true, y_pred, average=None)
+            aps = numpy.nan_to_num(aps)
+
+            self.values.append(aps.mean())
+            return self
 
 
 class FuncContinueAverage(Metrics):
@@ -79,7 +98,6 @@ class BinaryAccuracy(Metrics):
         return self
 
 
-
 class CategoricalAccuracy(Metrics):
     def __init__(self, epsilon=1e-10):
         Metrics.__init__(self, epsilon)
@@ -112,7 +130,7 @@ class Ratio(Metrics):
 
 
 class Precision(Metrics):
-    def __init__(self, dim = None, epsilon=1e-10):
+    def __init__(self, dim=None, epsilon=1e-10):
         Metrics.__init__(self, epsilon)
         self.dim = dim
 
@@ -131,12 +149,12 @@ class Precision(Metrics):
                 self.values.append(torch.as_tensor(0.0))
             else:
                 self.values.append(true_positives / (predicted_positives + self.epsilon))
-                
+
         return self
-        
+
 
 class Recall(Metrics):
-    def __init__(self, dim = None, epsilon=1e-10):
+    def __init__(self, dim=None, epsilon=1e-10):
         Metrics.__init__(self, epsilon)
         self.dim = dim
 
@@ -144,26 +162,26 @@ class Recall(Metrics):
         super().__call__(y_pred, y_true)
 
         with torch.set_grad_enabled(False):
-            dim = () if self.dim is None else self.dim            
+            dim = () if self.dim is None else self.dim
             y_true = y_true.float()
             y_pred = y_pred.float()
-            
+
             true_positives = torch.sum(torch.round(torch.clamp(y_true * y_pred, 0.0, 1.0)), dim=dim)
             possible_positives = torch.sum(torch.clamp(y_true, 0.0, 1.0), dim=dim)
-            
+
             if self.dim is None and possible_positives == 0:
                 self.values.append(torch.as_tensor(0.0))
             else:
                 self.values.append(true_positives / (possible_positives + self.epsilon))
-                
+
             return self
 
-        
+
 class FScore(Metrics):
-    def __init__(self, dim = None, epsilon=np.spacing(1)):
+    def __init__(self, dim=None, epsilon=np.spacing(1)):
         Metrics.__init__(self, epsilon)
         self.dim = dim
-        
+
         self.precision_func = Precision(dim, epsilon)
         self.recall_func = Recall(dim, epsilon)
 
@@ -171,8 +189,6 @@ class FScore(Metrics):
         super().__call__(y_pred, y_true)
 
         with torch.set_grad_enabled(False):
-            dim = () if self.dim is None else self.dim
-            
             self.precision = self.precision_func(y_pred, y_true)
             self.recall = self.recall_func(y_pred, y_true)
 
@@ -180,5 +196,5 @@ class FScore(Metrics):
                 self.values.append(torch.as_tensor(0.0))
             else:
                 self.values.append(2 * ((self.precision_func.value * self.recall_func.value) / (self.precision_func.value + self.recall_func.value + self.epsilon)))
-                
+
             return self
