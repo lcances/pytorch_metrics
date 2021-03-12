@@ -1,3 +1,8 @@
 metric_utils.egg_info/
 __pycache__/
-.ipynb_checkpoints/metric_utils.egg-info/
+.ipynb_checkpoints/
+.vscode/
+metric_utils.egg-info/dependency_links.txt
+metric_utils.egg-info/PKG-INFO
+metric_utils.egg-info/SOURCES.txt
+metric_utils.egg-info/top_level.txt
